@@ -1,4 +1,8 @@
 import logging
+import functools
+from typing import Optional
+from typing import Generator
+from typing import Callable
 
 from playwright.sync_api import sync_playwright
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -6,26 +10,42 @@ from playwright.sync_api._generated import BrowserType
 from playwright.sync_api._generated import Page
 
 
-logging.basicConfig(format="--- %(message)s")
+logging.basicConfig(format=".. %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-PROXIES_POOL = False
 BROWSER_TIMEOUT = 25 * 1000
 
 
+def retry_wraps(times: int = 3) -> Callable:
+    def retry(function: Callable) -> Callable:
+        """tries to run a function after an unsuccessful attempt."""
+
+        @functools.wraps(function)
+        def inner(*args, **kwargs):
+            for _ in range(times):
+                try:
+                    return function(*args, **kwargs)
+                except Exception as err:
+                    logger.error(err)
+
+        return inner
+
+    return retry
+
+
 # @retry_wraps()
-def goto_url(url: str, page) -> None:
-    logger.info(f"\nVisiting the url -> {url}")
-    page.wait_for_load_state("networkidle")
+def goto_url(url: str, page: Page, page_load_state: str = "load") -> None:
+    logger.info(f"Visiting the url -> {url}")
+    page.wait_for_load_state(page_load_state)
     response = page.goto(url)
     if response.ok:
         logger.debug("Page Done Loading...")
 
 
 def get_page_object(browser: BrowserType, proxies_pool: Optional[Generator] = None):
-    if PROXIES_POOL:
-        proxy = next(PROXIES_POOL)
+    if proxies_pool:
+        proxy = next(proxies_pool)
         proxy_dict = {
             "server": f"http://{proxy.get('host').strip()}:{proxy.get('port').strip()}"
         }
@@ -49,8 +69,11 @@ browser = playwright.chromium.launch(headless=False, slow_mo=400)
 
 ibba_homepage = "https://www.ibba.org"
 
-page = get_page_object()
-goto_url(ibba_homepage)
+page = get_page_object(browser)
+# goto_url(ibba_homepage, page)
 
 
-# "/find-a-business-broker/?place=oregon"
+place = "oregon"
+
+place_uri = f"/find-a-business-broker/?place={place.lower()}"
+goto_url(ibba_homepage + place_uri, page)
