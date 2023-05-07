@@ -39,7 +39,6 @@ def retry_wraps(times: int = 3) -> Callable:
 
 # @retry_wraps()
 def goto_url(url: str, page: Page, page_load_state: str = "load") -> None:
-    print(page_load_state)
     logger.info(f"Visiting the url -> {url}")
     page.wait_for_load_state(page_load_state)
     response = page.goto(url)
@@ -68,7 +67,35 @@ def get_page_object(browser: BrowserType, proxies_pool: Optional[Generator] = No
 
 
 def get_text_from_page_element(page_element: ElementHandle) -> str:
-	return page_element.text_content().strip()
+    return page_element.text_content().strip()
+
+
+def get_brokers_from_page(brokers: list, total_number_of_brokers: int) -> Queue:
+    broker_queue = Queue()
+    for broker in brokers:
+        broker_profile_href = broker.query_selector("a").get_attribute("href")
+        broker_name = broker.query_selector("h3").text_content()
+        logger.info(f"Name: {broker_name}")
+        logger.info(f"Profile Page: {broker_profile_href}")
+        broker_queue.put(broker_profile_href)
+    assert broker_queue.qsize() == total_number_of_brokers
+    return broker_queue
+
+
+def search_place_on_ibba(page: Page, place: str = "mississippi") -> Queue:
+    place_uri = f"/find-a-business-broker/?place={place.lower()}"
+    goto_url(ibba_homepage + place_uri, page, "domcontentloaded")
+
+    site_content_container = page.wait_for_selector("div#content")
+    listing_container = site_content_container.query_selector("div#listings")
+
+    h5_text = listing_container.wait_for_selector("h5").text_content()
+    total_number_of_brokers = int(re.search(r"\d+", h5_text).group())
+    logger.info(h5_text)
+
+    brokers = listing_container.query_selector_all("div.broker-block")
+    assert len(brokers) == total_number_of_brokers
+    return get_brokers_from_page(brokers, total_number_of_brokers)
 
 
 playwright = sync_playwright().start()
@@ -78,90 +105,68 @@ browser = playwright.chromium.launch(headless=False, slow_mo=400)
 ibba_homepage = "https://www.ibba.org"
 
 page = get_page_object(browser)
-# goto_url(ibba_homepage, page)
+broker_queue = search_place_on_ibba(page)
+
+while not broker_queue.empty():
+	profile_url = broker_queue.get()
+	goto_url(profile_url, page)
+
+	broker_profile_image_link = page.query_selector(
+	    "div.brokers__profile--image img"
+	).get_attribute("src")
 
 
-place = "mississippi"
-place_uri = f"/find-a-business-broker/?place={place.lower()}"
-goto_url(ibba_homepage + place_uri, page, "domcontentloaded")
+	profile_information = page.query_selector("div.brokers__profile--information")
+	profile_information_name = profile_information.query_selector(
+	    "h1.brokers__profile--informationName"
+	)
+	broker_name = get_text_from_page_element(profile_information_name)
 
 
-site_content_container = page.wait_for_selector("div#content")
-listing_container = site_content_container.query_selector("div#listings")
-
-h5_text = listing_container.wait_for_selector("h5").text_content()
-total_number_of_brokers = int(re.search(r"\d+", h5_text).group())
-logger.info(h5_text)
-
-
-brokers = listing_container.query_selector_all("div.broker-block")
-assert len(brokers) == total_number_of_brokers
+	broker_is_cbi = "No"
+	top_cbi = profile_information.query_selector_all("span.brokers__item--topCBI")
+	if top_cbi:
+	    for cbi in top_cbi:
+	        text = get_text_from_page_element(cbi)
+	        if text == "CBI":
+	            broker_is_cbi = "Yes"
 
 
-broker_queue = Queue()
-for broker in brokers:
-	broker_profile_href = broker.query_selector("a").get_attribute("href")
-	broker_name = broker.query_selector("h3").text_content()
-	logger.info(f"Name: {broker_name}")
-	logger.info(f"Profile Page: {broker_profile_href}")
-	broker_queue.put(broker_profile_href)
-assert broker_queue.qsize() == total_number_of_brokers
+	member_date = page.query_selector("div.brokers__profile--memberDate")
+	broker_member_date = get_text_from_page_element(member_date)
+
+	broker_email, broker_phone = "", ""
+	left_phone = page.query_selector_all("div.brokers__profile--leftPhone > a")
+	for element in left_phone:
+		text = get_text_from_page_element(element)
+		if text.__contains__("@"):
+			broker_email = text
+		else:
+			broker_phone = text
+
+	city = page.query_selector("div.brokers__profile--leftCity")
+	broker_city = get_text_from_page_element(city).replace("\n", "")
 
 
-
-# while not broker_queue.empty():
-profile_url = broker_queue.get()
-goto_url(profile_url, page)
+	address = page.query_selector("div.brokers__profile--leftAddress")
+	broker_address = get_text_from_page_element(address).lstrip("apartment ")
 
 
-broker_profile_image_link = page.query_selector("div.brokers__profile--image img").get_attribute("src")
+	broker_website = ""
+	left_links = page.query_selector_all("div.brokers__profile--leftLink > a")
+	for link in left_links:
+	    value = link.get_property("target").json_value()
+	    if value:
+	        broker_website = link.get_attribute("href")
+	        break
 
 
-profile_information = page.query_selector("div.brokers__profile--information")
-profile_information_name = profile_information.query_selector("h1.brokers__profile--informationName")
-broker_name = get_text_from_page_element(profile_information_name)
-
-
-broker_is_cbi = "No"
-top_cbi = profile_information.query_selector_all("span.brokers__item--topCBI")
-if top_cbi:
-	text = get_text_from_page_element(top_cbi[-1])
-	if text == "CBI":
-		broker_is_cbi = "Yes"
-
-
-member_date = page.query_selector("div.brokers__profile--memberDate")
-broker_member_date = get_text_from_page_element(member_date)
-
-
-# # tel = left_phone[0].query_selector("span > a").get_attribute("href")
-# # broker_phone = tel.lstrip("tel:")
-# # email = left_phone[1].query_selector("a").get_attribute("href")
-
-
-left_phone = page.query_selector_all("div.brokers__profile--leftPhone > a")
-broker_phone = get_text_from_page_element(left_phone[0])
-broker_email = get_text_from_page_element(left_phone[1])
-
-
-city = page.query_selector("div.brokers__profile--leftCity")
-broker_city = get_text_from_page_element(city).replace("\n", "")
-
-
-address = page.query_selector("div.brokers__profile--leftAddress")
-broker_address = get_text_from_page_element(address).lstrip("apartment ")
-
-
-broker_website = ""
-left_links = page.query_selector_all("div.brokers__profile--leftLink > a")
-for link in left_links:
-	value = link.get_property("target").json_value()
-	if value:
-		broker_website = link.get_attribute("href")
-		break
-
-
-speciality = page.query_selector("ul.brokers__profile--leftSpeciality")
-broker_speciality = ",".join([element.text_content().strip() for element in speciality.query_selector_all("li") ])
-
-
+	broker_speciality = ""
+	speciality = page.query_selector("ul.brokers__profile--leftSpeciality")
+	if speciality:
+	    broker_speciality = ",".join(
+	        [
+	            element.text_content().strip()
+	            for element in speciality.query_selector_all("li")
+	        ]
+	    )
