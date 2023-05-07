@@ -184,7 +184,6 @@ while not broker_queue.empty():
     profile_url = broker_queue.get()
     goto_url(profile_url, page)
 
-    
     get_broker_profile_image_link(page)
     get_broker_name_and_cbi(page)
     get_broker_member_date(page)
