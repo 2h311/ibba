@@ -16,7 +16,7 @@ from playwright.sync_api._generated import ElementHandle
 from models import IbbaProfileFields
 
 
-logging.basicConfig(format=".. %(message)s")
+logging.basicConfig(format="... %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -41,7 +41,7 @@ def retry_wraps(times: int = 3) -> Callable:
     return retry
 
 
-# @retry_wraps()
+@retry_wraps()
 def goto_url(url: str, page: Page, page_load_state: str = "load") -> None:
     logger.info(f"Visiting the url -> {url}")
     page.wait_for_load_state(page_load_state)
