@@ -86,7 +86,7 @@ def get_brokers_from_page(brokers: list, total_number_of_brokers: int) -> Queue:
     return broker_queue
 
 
-def search_place_on_ibba(page: Page, place: str = "mississippi") -> Queue:
+def search_place_on_ibba(page: Page, place: str = "utah") -> Queue:
     place_uri = f"/find-a-business-broker/?place={place.lower()}"
     goto_url(IBBA_HOMEPAGE + place_uri, page, "domcontentloaded")
 
@@ -100,17 +100,6 @@ def search_place_on_ibba(page: Page, place: str = "mississippi") -> Queue:
     brokers = listing_container.query_selector_all("div.broker-block")
     assert len(brokers) == total_number_of_brokers
     return get_brokers_from_page(brokers, total_number_of_brokers)
-
-
-playwright = sync_playwright().start()
-browser = playwright.chromium.launch(headless=False, slow_mo=400)
-
-page = get_page_object(browser)
-broker_queue = search_place_on_ibba(page)
-
-while not broker_queue.empty():
-    profile_url = broker_queue.get()
-    goto_url(profile_url, page)
 
 
 def get_broker_profile_image_link(page: Page):
@@ -183,3 +172,23 @@ def get_broker_speciality(page: Page):
                 for element in speciality.query_selector_all("li")
             ]
         )
+
+
+playwright = sync_playwright().start()
+browser = playwright.chromium.launch(headless=False, slow_mo=400)
+
+page = get_page_object(browser)
+broker_queue = search_place_on_ibba(page)
+
+while not broker_queue.empty():
+    profile_url = broker_queue.get()
+    goto_url(profile_url, page)
+
+    get_broker_profile_image_link(page)
+    get_broker_name_and_cbi(page)
+    get_broker_member_date(page)
+    get_broker_email_and_phone(page)
+    get_broker_city(page)
+    get_broker_address(page)
+    get_broker_website(page)
+    get_broker_speciality(page)
