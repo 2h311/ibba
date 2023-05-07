@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 
 
-class IbbaProfile(BaseModel):
+class IbbaProfileFields(BaseModel):
     url: str = "Profile URL"
     image_link: str = "Profile Image Link"
     name: str = "Profile Name"
