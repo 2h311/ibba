@@ -14,6 +14,7 @@ from playwright.sync_api._generated import BrowserType
 from playwright.sync_api._generated import ElementHandle
 
 from models import IbbaProfileFields
+from database import database
 
 
 logging.basicConfig(format="... %(message)s")
@@ -89,12 +90,16 @@ def get_brokers_from_page(brokers: list, total_number_of_brokers: int) -> Queue:
     return broker_queue
 
 
-def search_place_on_ibba(page: Page, place: str = "indiana") -> Queue:
-    place_uri = f"/find-a-business-broker/?place={place.lower()}"
-    goto_url(IBBA_HOMEPAGE + place_uri, page, "domcontentloaded")
+def search_place_on_ibba(page: Page, place: str) -> Queue:
+    place = re.sub("\s+", "+", place.lower())
+    place_uri = f"/find-a-business-broker/?place={place}"
+    goto_url(IBBA_HOMEPAGE + place_uri, page, "networkidle")
 
     site_content_container = page.wait_for_selector("div#content")
     listing_container = site_content_container.query_selector("div#listings")
+    if not listing_container:
+        logger.error("We couldn't find any broker matching your search")
+        return Queue()
 
     h5_text = listing_container.wait_for_selector("h5").text_content()
     total_number_of_brokers = int(re.search(r"\d+", h5_text).group())
@@ -189,28 +194,32 @@ def get_broker_speciality(page: Page, broker_data_dict: dict) -> None:
     broker_data_dict[ibba_profile_fields.speciality] = broker_speciality
 
 
-playwright = sync_playwright().start()
+def main(place_to_search: str = "dc") -> None:
+    playwright = sync_playwright().start()
+    browser = playwright.chromium.launch(headless=False, slow_mo=250)
+    page = get_page_object(browser)
+    broker_queue = search_place_on_ibba(page, place_to_search)
+
+    while not broker_queue.empty():
+        broker_data_dict = dict()
+        profile_url = broker_queue.get()
+        goto_url(profile_url, page)
+        broker_data_dict[ibba_profile_fields.url] = profile_url
+
+        get_broker_profile_image_link(page, broker_data_dict)
+        get_broker_name_and_cbi(page, broker_data_dict)
+        get_broker_member_date(page, broker_data_dict)
+        get_broker_email_and_phone(page, broker_data_dict)
+        get_broker_city(page, broker_data_dict)
+        get_broker_address(page, broker_data_dict)
+        get_broker_website(page, broker_data_dict)
+        get_broker_speciality(page, broker_data_dict)
+
+        database.brokers.insert_one(broker_data_dict)
+        pprint.pp(broker_data_dict)
+
+    browser.close()
+
+
 ibba_profile_fields = IbbaProfileFields()
-browser = playwright.chromium.launch(headless=False, slow_mo=250)
-
-page = get_page_object(browser)
-broker_queue = search_place_on_ibba(page, "florida")
-
-while not broker_queue.empty():
-    broker_data_dict = dict()
-    profile_url = broker_queue.get()
-    goto_url(profile_url, page)
-    broker_data_dict[ibba_profile_fields.url] = profile_url
-
-    get_broker_profile_image_link(page, broker_data_dict)
-    get_broker_name_and_cbi(page, broker_data_dict)
-    get_broker_member_date(page, broker_data_dict)
-    get_broker_email_and_phone(page, broker_data_dict)
-    get_broker_city(page, broker_data_dict)
-    get_broker_address(page, broker_data_dict)
-    get_broker_website(page, broker_data_dict)
-    get_broker_speciality(page, broker_data_dict)
-
-    pprint.pp(broker_data_dict)
-
-browser.close()
+main(input("What's a place to search on ibba? Press Enter> "))
