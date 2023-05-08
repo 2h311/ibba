@@ -5,4 +5,5 @@ from pymongo.mongo_client import MongoClient
 
 
 load_dotenv()
-client = MongoClient(os.environ.get("URI"))
+client = MongoClient(os.getenv("uri"))
+db = client.get_database(os.getenv("databasename"))

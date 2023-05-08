@@ -137,7 +137,7 @@ def get_broker_member_date(page: Page, broker_data_dict: dict) -> None:
 
 
 def get_broker_email_and_phone(page: Page, broker_data_dict: dict) -> None:
-    broker_email, broker_phone = "", ""
+    broker_email, broker_phone = "-", "-"
     left_phone = page.query_selector_all("div.brokers__profile--leftPhone > a")
     for element in left_phone:
         text = get_text_from_page_element(element)
@@ -165,7 +165,7 @@ def get_broker_address(page: Page, broker_data_dict: dict) -> None:
 
 
 def get_broker_website(page: Page, broker_data_dict: dict) -> None:
-    broker_website = ""
+    broker_website = "-"
     left_links = page.query_selector_all("div.brokers__profile--leftLink > a")
     for link in left_links:
         value = link.get_property("target").json_value()
@@ -177,7 +177,7 @@ def get_broker_website(page: Page, broker_data_dict: dict) -> None:
 
 
 def get_broker_speciality(page: Page, broker_data_dict: dict) -> None:
-    broker_speciality = ""
+    broker_speciality = "-"
     speciality = page.query_selector("ul.brokers__profile--leftSpeciality")
     if speciality:
         broker_speciality = ",".join(
@@ -194,7 +194,7 @@ ibba_profile_fields = IbbaProfileFields()
 browser = playwright.chromium.launch(headless=False, slow_mo=250)
 
 page = get_page_object(browser)
-broker_queue = search_place_on_ibba(page)
+broker_queue = search_place_on_ibba(page, "florida")
 
 while not broker_queue.empty():
     broker_data_dict = dict()
@@ -212,3 +212,5 @@ while not broker_queue.empty():
     get_broker_speciality(page, broker_data_dict)
 
     pprint.pp(broker_data_dict)
+
+browser.close()
